@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>IronTrack 12.9 | Workout Journal</title>
+    <script src="https://appassets.androidplatform.net/assets/tailwind.js" onerror="var t=document.createElement('script');t.src='https://cdn.tailwindcss.com';document.head.appendChild(t)"></script>
+    <style>
+        :root { --accent: #f59e0b; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        #main-scroll-area { height: calc(100dvh - 70px); overflow-y: auto; padding-bottom: 350px; }
+        
+        .rir-0 { border-left: 4px solid #f43f5e !important; }
+        .rir-1 { border-left: 4px solid #fbbf24 !important; }
+        .rir-2 { border-left: 4px solid #10b981 !important; }
+        
+        .logged-row { background-color: rgba(15, 23, 42, 0.9); opacity: 0.4; pointer-events: none; }
+        #info-modal { display: none; position: fixed; inset: 0; background: rgba(2, 6, 23, 0.98); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+        
+        @keyframes full-screen-ping {
+            0% { background-color: rgba(56, 189, 248, 0); }
+            50% { background-color: rgba(56, 189, 248, 0.15); }
+            100% { background-color: rgba(56, 189, 248, 0); }
+        }
+        .ping-active { animation: full-screen-ping 1.5s ease-in-out 2; }
+
+        @keyframes walk-banner {
+            0%, 100% { transform: scale(1); background-color: #0ea5e9; }
+            50% { transform: scale(1.05); background-color: #f59e0b; }
+        }
+        .walk-active { animation: walk-banner 1s infinite; color: #020617 !important; padding: 4px 12px; border-radius: 8px; font-weight: 900 !important; }
+        .timer-selected { background-color: #f59e0b !important; color: #020617 !important; border-color: #f59e0b !important; }
+    </style>
+</head>
+<body id="app-body" class="bg-slate-950 text-slate-100 min-h-screen font-sans overflow-hidden">
+
+    <div id="info-modal" onclick="closeInfo()">
+        <div class="bg-slate-900 border border-slate-800 p-6 rounded-3xl w-full max-w-sm" onclick="event.stopPropagation()">
+            <h3 id="info-title" class="text-amber-500 font-black uppercase text-sm mb-4 tracking-widest text-center">Neural Readiness</h3>
+            <div id="warmup-content" class="space-y-4 mb-6"></div>
+            <button onclick="closeInfo()" class="w-full bg-slate-800 text-white font-black py-4 rounded-2xl uppercase text-[10px]">Back to Session</button>
+        </div>
+    </div>
+
+    <nav class="sticky top-0 z-[100] bg-slate-900 border-b border-slate-800 flex justify-around">
+        <button onclick="switchTab('log')" id="tab-log" class="flex-1 py-4 text-[10px] font-black uppercase tracking-widest border-b-2 border-amber-500 text-white">Log</button>
+        <button onclick="switchTab('lib')" id="tab-lib" class="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Vault</button>
+        <button onclick="switchTab('journal')" id="tab-journal" class="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Journal</button>
+    </nav>
+
+    <div id="main-scroll-area" class="max-w-md mx-auto p-4 no-scrollbar">
+        <div id="view-log">
+            <header class="flex justify-between items-start mb-6 px-1">
+                <div>
+                    <input type="date" id="date-selector" onchange="changeDate()" class="bg-transparent text-amber-500 font-black text-xl outline-none">
+                    <select id="routine-selector" onchange="resetAndInit()" class="bg-transparent text-slate-500 font-bold text-[10px] uppercase outline-none mt-1"><option value="upper">Upper</option><option value="lower">Lower</option></select>
+                </div>
+                <div class="text-right">
+                    <p id="timer-display" class="text-sky-400 font-black text-3xl tracking-tighter leading-none">0:00</p>
+                    <div id="walk-container" class="mt-1 flex items-center gap-2 justify-end h-7">
+                        <span id="walk-status" class="text-[9px] font-black uppercase text-slate-600 transition-all">Standby</span>
+                        <button id="shattered-btn" onclick="toggleShattered()" class="text-[8px] px-2 py-0.5 border border-rose-900 text-rose-900 rounded font-black uppercase">Shattered</button>
+                    </div>
+                </div>
+            </header>
+            <div id="log-list" class="space-y-6"></div>
+        </div>
+
+        <div id="view-lib" class="hidden">
+            <h2 class="text-xl font-black text-white uppercase mb-4 px-2">Vault</h2>
+            <div class="px-2 mb-4 space-y-2">
+                <p id="bk-status" class="text-[9px] font-bold text-slate-500 uppercase leading-relaxed"></p>
+                <div class="flex gap-2">
+                    <button onclick="chooseFolder()" class="flex-1 bg-amber-500 text-slate-950 font-black text-[10px] py-3 rounded-xl uppercase">Backup Folder</button>
+                    <button onclick="exportData()" class="flex-1 bg-sky-600 text-white font-black text-[10px] py-3 rounded-xl uppercase">Save Backup</button>
+                    <button onclick="importData()" class="flex-1 bg-slate-800 text-white font-black text-[10px] py-3 rounded-xl uppercase border border-slate-700">Restore</button>
+                </div>
+            </div>
+            <h3 class="text-amber-500 font-black uppercase text-[10px] tracking-widest px-2 mt-6">Exercise Editor</h3>
+            <p class="text-[9px] text-slate-500 px-2 mb-2">Renaming an exercise starts a new history for that name.</p>
+            <div id="editor" class="px-2"></div>
+            <h3 class="text-amber-500 font-black uppercase text-[10px] tracking-widest px-2 mt-6 mb-2">Personal Bests</h3>
+            <div id="history-display" class="space-y-2 pb-20 px-2"></div>
+        </div>
+
+        <div id="view-journal" class="hidden">
+            <h2 class="text-xl font-black text-white uppercase mb-4 px-2">Workout Journal</h2>
+            <div id="cal" class="px-2"></div>
+            <div id="journal-display" class="space-y-6 pb-20 px-2"></div>
+        </div>
+    </div>
+
+    <div class="fixed bottom-0 left-0 right-0 bg-slate-900/95 border-t border-slate-800 p-5 z-[200]">
+        <div class="max-w-md mx-auto">
+            <div class="flex justify-between items-center mb-4">
+                <span class="text-[9px] font-black text-slate-500 uppercase">Select Rest</span>
+                <div class="flex gap-2">
+                    <button id="btn-90" onclick="selectRest(90)" class="px-5 py-2 bg-slate-800 rounded-xl text-[10px] font-black uppercase border border-slate-700 transition-all">90s</button>
+                    <button id="btn-180" onclick="selectRest(180)" class="px-5 py-2 bg-slate-800 rounded-xl text-[10px] font-black uppercase border border-slate-700 transition-all">180s</button>
+                </div>
+            </div>
+            <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex justify-between items-center">
+                <p class="text-[9px] font-black text-slate-600 uppercase">Vol: <span id="total-tonnage" class="text-white text-lg ml-1">0</span> KG</p>
+                <button onclick="saveAll(); alert('Session Saved.')" class="bg-sky-600 text-white font-black text-[10px] px-6 py-3 rounded-xl uppercase tracking-widest">Sync Session</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const splitOrder = ["upper", "lower"];
+        const legacy = {
+            pushA: [
+                {n: "Incline DB Press", s: 4, r: "6-10", rir: 2, c: "45-deg bench.", alt: null, t: 1},
+                {n: "Flat Machine Press", s: 3, r: "6-10", rir: 2, c: "Control eccentric.", alt: "Chest Press Machine", t: 1},
+                {n: "Shoulder Press", s: 3, r: "6-10", rir: 2, c: "Brace hard.", alt: null, t: 1},
+                {n: "SA Lateral Raise", s: 3, r: "12-15", rir: 1, c: "Maintain constant tension.", alt: "DB Lateral Raise", t: 0},
+                {n: "Overhead Triceps Ext", s: 3, r: "10-12", rir: 1, c: "Keep elbows tucked.", alt: null, t: 0}
+            ],
+            pullA: [
+                {n: "Weighted Pull-Ups", s: 4, r: "6-10", rir: 1, c: "Full ROM.", alt: "Lat Pulldown", t: 1},
+                {n: "Chest-Supported Row", s: 4, r: "8-12", rir: 1, c: "Drive elbows back.", alt: "Machine Row", t: 1},
+                {n: "Rear-Delt Pec Deck", s: 3, r: "12-15", rir: 0, c: "Failure.", alt: null, t: 0},
+                {n: "Incline DB Curl", s: 3, r: "8-12", rir: 1, c: "Stretch.", alt: null, t: 0},
+                {n: "Hammer Curl", s: 3, r: "10-12", rir: 1, c: "Neutral.", alt: null, t: 0}
+            ],
+            legsA: [
+                {n: "Hack Squat", s: 4, r: "8-10", rir: 2, c: "Deep travel.", alt: "Smith Squat", t: 2},
+                {n: "Seated Leg Curl", s: 4, r: "10-12", rir: 1, c: "Pin hips.", alt: null, t: 1},
+                {n: "Leg Extension", s: 3, r: "12-15", rir: 0, c: "Max failure.", alt: null, t: 0},
+                {n: "Smith Calf Raise", s: 5, r: "8-12", rir: 1, c: "Hold stretch.", alt: null, t: 1}
+            ],
+            pushB: [
+                {n: "Weighted Dips", s: 4, r: "6-10", rir: 2, c: "Leaning forward.", alt: "Cables", t: 1},
+                {n: "Flat DB Press", s: 3, r: "8-12", rir: 2, c: "Strict.", alt: null, t: 1},
+                {n: "DB Shoulder Press", s: 3, r: "8-10", rir: 2, c: "Vertical.", alt: null, t: 1},
+                {n: "Cable Lateral Raise", s: 3, r: "12-15", rir: 1, c: "Constant.", alt: null, t: 0},
+                {n: "Tricep Pushdown", s: 3, r: "10-12", rir: 1, c: "Lock out.", alt: null, t: 0}
+            ],
+            pullB: [
+                {n: "Barbell Row", s: 4, r: "6-10", rir: 1, c: "Strict hinge.", alt: "Seal Row", t: 1},
+                {n: "Lat Pulldown", s: 4, r: "8-12", rir: 1, c: "Neutral grip.", alt: null, t: 1},
+                {n: "Face Pulls", s: 3, r: "15-20", rir: 1, c: "Slow.", alt: null, t: 0},
+                {n: "Preacher Curl", s: 3, r: "10-12", rir: 1, c: "Control.", alt: null, t: 0},
+                {n: "Cable Curl", s: 3, r: "12-15", rir: 1, c: "Constant.", alt: null, t: 0}
+            ],
+            legsB: [
+                {n: "Romanian Deadlift", s: 4, r: "6-10", rir: 2, c: "Hinge focus.", alt: "DB RDL", t: 2},
+                {n: "Wide Leg Press", s: 3, r: "10-12", rir: 1, c: "High feet.", alt: null, t: 1},
+                {n: "Lying Leg Curl", s: 3, r: "10-12", rir: 1, c: "Control return.", alt: null, t: 1},
+                {n: "Smith Calf Raise", s: 4, r: "10-15", rir: 1, c: "Constant.", alt: null, t: 1}
+            ]
+        };
+
+        const exercises = {
+            upper: [
+                {n:"Chest Press", s:2, r:"8-10", w0:40, inc:2, alt:["Push-Ups","DB Bench Press"], c:"Control the eccentric."},
+                {n:"Chest-Supported Row", s:2, r:"10-12", w0:15, inc:2, alt:["Seated Cable Row","DB Row"], c:"Drive elbows back."},
+                {n:"Incline DB Press", s:2, r:"8-10", w0:22, inc:1, alt:["Incline Machine Press"], c:"Weight is per hand."},
+                {n:"Lat Pulldown", s:2, r:"8-10", w0:32, inc:2, alt:["Assisted Pull-Up","Cable Pulldown"], c:"Full stretch."},
+                {n:"Lateral Raise", s:3, r:"12-15", w0:6, inc:1, alt:["Cable Lateral Raise"], c:"Weight is per hand."},
+                {n:"Rope Pushdown", s:2, r:"10-15", w0:null, inc:2, alt:["Bar Pushdown","Bench Dips"], c:"Lock out."},
+                {n:"DB Curls", s:2, r:"10-12", w0:15, inc:1, alt:["Cable Curls"], c:"Weight is per hand."}
+            ],
+            lower: [
+                {n:"Leg Press", s:2, r:"10-12", w0:null, inc:5, alt:["Hack Squat","Goblet Squat","Belt Squat"], c:"Stop descent before lower back leaves the pad."},
+                {n:"Leg Extension", s:2, r:"10-12", w0:null, inc:2, alt:["Sissy Squat","Spanish Squat"], c:"Controlled."},
+                {n:"Hamstring Curl", s:2, r:"10-12", w0:null, inc:2, alt:["Romanian Deadlift (DB, light)","Seated Hamstring Curl"], c:"Controlled return."},
+                {n:"Calf Raise", s:2, r:"12-15", w0:null, inc:2, alt:["Seated Calf Raise","Leg-Press Calf Raise"], c:"Hold the stretch."},
+                {n:"Back Extension", s:2, r:"10-12", w0:0, inc:2.5, alt:["Glute Bridge","Bird Dog"], c:"Bodyweight."},
+                {n:"Plank", s:3, r:"sec", time:true, w0:0, inc:5, alt:["Dead Bug","Side Plank"], c:"Log seconds."},
+                {n:"Sit-Ups", s:2, r:"12-15", w0:0, inc:2, alt:["Cable Crunches","Hanging Knee Raise"], c:"Pick one per session."}
+            ]
+        };
+
+        function optsOf(e) { return [e.n].concat(e.alt || []); }
+        function findEx(name) { for (const k in exercises) for (const e of exercises[k]) if (optsOf(e).includes(name)) return e; return null; }
+        function baseName(k) { return k.slice(0, k.lastIndexOf('-')); }
+        // Double progression: top of range on all sets -> add weight, back to bottom reps; else same weight, +1 rep
+        function suggest(name, ex) {
+            ex = ex || findEx(name); if (!ex) return '';
+            const dates = Object.keys(liftLog).filter(d => d < activeDate).sort().reverse();
+            for (const d of dates) {
+                const sets = Object.entries(liftLog[d]).filter(([k, v]) => v && v.done && baseName(k) === name).map(([k, v]) => ({w: parseFloat(v.w), r: parseInt(v.r)}));
+                if (!sets.length) continue;
+                if (ex.time) { const m = Math.min(...sets.map(x => x.r)); return `Next: ${sets.length >= ex.s ? m + 5 : m}s per set`; }
+                const [lo, hi] = ex.r.split('-').map(Number);
+                const w = Math.max(...sets.map(x => x.w)); const top = sets.filter(x => x.w === w); const m = Math.min(...top.map(x => x.r));
+                if (liftLog[d]['flag|' + name]) return `Hold: ${w}kg \u00d7 ${m} (${liftLog[d]['flag|' + name]})`;
+                if (top.length >= ex.s && m >= hi) return `Next: ${w + (ex.inc || 2)}kg \u00d7 ${lo}`;
+                return `Next: ${w}kg \u00d7 ${Math.min(hi, m + 1)}`;
+            }
+            if (ex.time) return 'Start: 30s per set';
+            return ex.w0 == null ? 'Set your start weight' : `Start: ${ex.w0}kg \u00d7 ${ex.r.split('-')[0]}`;
+        }
+        function noteFor(name) {
+            const d = liftLog[activeDate];
+            let v = d && d['note|' + name] !== undefined ? d['note|' + name] : '';
+            if (v === '') { const ds = Object.keys(liftLog).filter(x => x < activeDate && liftLog[x]['note|' + name]).sort().reverse(); if (ds.length) v = liftLog[ds[0]]['note|' + name]; }
+            return String(v).replace(/"/g, '&quot;');
+        }
+        function saveNote(name, v) { if (!liftLog[activeDate]) liftLog[activeDate] = {}; liftLog[activeDate]['note|' + name] = v; saveAll(); }
+        // Calendar
+        let calM = new Date(); let selDay = null;
+        function dayType(d) { const x = liftLog[d]; if (!x) return null; if (x.__type) return x.__type; return Object.values(x).some(v => v && v.done) ? 'legacy' : null; }
+        function renderCal() {
+            const y = calM.getFullYear(), m = calM.getMonth(); const first = (new Date(y, m, 1).getDay() + 6) % 7; const n = new Date(y, m + 1, 0).getDate();
+            const col = {upper: '#0ea5e9', lower: '#10b981', legacy: '#f59e0b'};
+            let h = `<div class="flex justify-between items-center mb-2"><button onclick="calNav(-1)" class="text-amber-500 font-black px-3">\u2039</button><span class="text-xs font-black uppercase text-white">${calM.toLocaleDateString('en-GB', {month: 'long', year: 'numeric'})}</span><button onclick="calNav(1)" class="text-amber-500 font-black px-3">\u203a</button></div><div class="grid grid-cols-7 gap-1 text-center mb-3">`;
+            for (let i = 0; i < first; i++) h += '<div></div>';
+            for (let d = 1; d <= n; d++) {
+                const ds = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`; const t = dayType(ds);
+                h += `<button onclick="pickDay('${ds}')" class="aspect-square rounded-lg text-[10px] font-black ${ds === selDay ? 'ring-2 ring-white' : ''}" style="background:${t ? col[t] : '#0f172a'};color:${t ? '#020617' : '#64748b'}">${d}</button>`;
+            }
+            h += '</div><div class="flex gap-3 text-[8px] font-black uppercase text-slate-500 mb-4 justify-center"><span style="color:#0ea5e9">\u25a0 Upper</span><span style="color:#10b981">\u25a0 Lower</span><span style="color:#f59e0b">\u25a0 Old PPL</span>' + (selDay ? '<button onclick="pickDay(null)" class="text-white">Show all</button>' : '') + '</div>';
+            document.getElementById('cal').innerHTML = h;
+        }
+        function calNav(i) { calM = new Date(calM.getFullYear(), calM.getMonth() + i, 1); renderCal(); }
+        function pickDay(d) { selDay = (d === selDay) ? null : d; switchTab('journal'); }
+
+        let activeDate = new Date().toLocaleDateString('en-CA');
+        let liftLog = JSON.parse(localStorage.getItem('iron_log_v4')) || {};
+        let pbHistory = JSON.parse(localStorage.getItem('iron_history_v4')) || {};
+        let activeAlts = {}; 
+        let timerInterval;
+        let timerEndTime = 0; 
+        let walkTimeout;
+        let isShattered = false;
+        let selectedRestTime = 90;
+
+        function checkAutoAdvance() {
+            const sel = document.getElementById('routine-selector');
+            if (liftLog[activeDate] && liftLog[activeDate].__type) { sel.value = liftLog[activeDate].__type; return; }
+            for (const d of Object.keys(liftLog).sort().reverse()) {
+                const x = liftLog[d]; let t = x.__type;
+                if (!t) for (const k of ['upper', 'lower']) {
+                    const names = new Set(exercises[k].flatMap(optsOf));
+                    const c = new Set(Object.entries(x).filter(([kk, v]) => v && v.done).map(([kk]) => baseName(kk)).filter(n => names.has(n)));
+                    if (c.size >= 3) t = k;
+                }
+                if (t === 'upper' || t === 'lower') { sel.value = t === 'upper' ? 'lower' : 'upper'; return; }
+            }
+            sel.value = 'upper';
+        }
+
+        function selectRest(sec) {
+            selectedRestTime = sec;
+            document.querySelectorAll('[id^="btn-"]').forEach(b => b.classList.remove('timer-selected'));
+            document.getElementById(`btn-${sec}`).classList.add('timer-selected');
+        }
+
+        function toggleShattered() {
+            isShattered = !isShattered;
+            const btn = document.getElementById('shattered-btn');
+            btn.className = isShattered ? "text-[8px] px-2 py-0.5 bg-rose-600 text-white rounded font-black uppercase border-none" : "text-[8px] px-2 py-0.5 border border-rose-900 text-rose-900 rounded font-black uppercase";
+            if(isShattered) stopWalk();
+        }
+
+        function resetAndInit() { activeAlts = {}; initRoutine(); }
+
+        function initRoutine() {
+            const key = document.getElementById('routine-selector').value;
+            const container = document.getElementById('log-list');
+            const dayData = liftLog[activeDate] || {};
+            
+            container.innerHTML = exercises[key].map((exRaw, exIdx) => {
+                const exName = optsOf(exRaw)[activeAlts[exIdx] || 0];
+                const pbData = pbHistory[exName] ? pbHistory[exName].split('-') : [0,0];
+                const pbW = parseFloat(pbData[0]);
+
+                let setHtml = ''; const pre = prefill(exName, exRaw);
+                for(let s=0; s<exRaw.s; s++) {
+                    const saved = dayData[`${exName}-${s}`] || {w:'', r:'', done: false};
+                    setHtml += `
+                        <div class="grid grid-cols-5 gap-2 items-center p-2 rounded-xl ${saved.done ? 'logged-row' : ''}">
+                            <div class="text-[8px] font-black text-slate-500 uppercase">Set ${s+1}<div class="text-slate-400 normal-case font-bold">${lastSet(exName, s)}</div></div>
+                            <input type="number" id="w-${exIdx}-${s}" value="${saved.w !== '' ? saved.w : pre.w}" oninput="updateTemp('${exName}', ${s}, 'w', this.value)" placeholder="KG" class="bg-slate-800 rounded-lg p-2 text-center text-xs text-white outline-none">
+                            <input type="number" id="r-${exIdx}-${s}" value="${saved.r !== '' ? saved.r : pre.r}" oninput="updateTemp('${exName}', ${s}, 'r', this.value)" placeholder="${exRaw.time ? 'Sec' : 'Reps'}" class="bg-slate-800 rounded-lg p-2 text-center text-xs text-white outline-none">
+                            <button onclick="toggleSet(${exIdx}, ${s}, '${exName}')" class="col-span-2 text-[10px] font-black uppercase rounded-lg h-9 bg-slate-800 ${saved.done ? 'text-rose-400' : 'text-amber-500'} pointer-events-auto">
+                                ${saved.done ? 'UNDO' : 'LOG'}
+                            </button>
+                        </div>`;
+                }
+
+                return `
+                    <div class="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl rir-${exRaw.rir ?? 1}">
+                        <div class="bg-slate-800/40 px-5 py-3 flex justify-between items-center border-b border-slate-800">
+                            <div class="flex items-center gap-3">
+                                <button onclick="showCoach('${exName}', ${pbW}, '${exRaw.c}', '${exRaw.r}', ${exRaw.t}, ${exIdx})" class="w-7 h-7 bg-slate-950 border border-slate-700 rounded-full text-amber-500 text-[10px] font-black">i</button>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h2 class="font-black text-sm uppercase ${activeAlts[exIdx] ? 'text-sky-400' : 'text-white'} leading-none">${exName}</h2>
+                                        <span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-slate-950 text-amber-500 border border-amber-900/30">${exRaw.time ? 'SEC' : exRaw.r}</span>
+                                    </div>
+                                    <p class="text-[8px] font-bold text-slate-500 mt-1 uppercase">Best: ${pbW}KG</p>
+                                    <p class="text-[9px] font-black text-sky-400 mt-1">${suggest(exName, exRaw)}</p>${stalled(exName) ? '<p class="text-[9px] font-black text-rose-400 mt-1">STALLED 3 SESSIONS \u2013 SWAP OR SMALLER STEP</p>' : ''}
+                                </div>
+                            </div>
+                            ${exRaw.alt ? `<button onclick="activeAlts[${exIdx}]=((activeAlts[${exIdx}]||0)+1)%${optsOf(exRaw).length}; initRoutine()" class="text-[9px] bg-slate-950 px-2 py-1 rounded-lg font-black text-sky-400 border border-sky-900/50 uppercase">⇄ Swap</button>` : ''}
+                        </div>
+                        <div class="px-2 py-3 space-y-1">${setHtml}<div class="flex gap-2 mt-2"><button onclick="flagEx('${exName}')" class="shrink-0 px-3 rounded-lg text-[10px] font-black uppercase ${flagCls(exName)}">${flagTxt(exName)}</button><input type="text" value="${noteFor(exName)}" oninput="saveNote('${exName}', this.value)" placeholder="Notes / form cues" class="flex-1 bg-slate-800 rounded-lg p-2 text-[11px] text-slate-300 outline-none"></div></div>
+                    </div>`;
+            }).join('');
+            calcTonnage();
+            selectRest(selectedRestTime);
+        }
+
+        function toggleSet(exIdx, setIdx, name) {
+            if(!liftLog[activeDate]) liftLog[activeDate] = {};
+            const key = `${name}-${setIdx}`;
+            if(!liftLog[activeDate][key]) liftLog[activeDate][key] = {w:'', r:'', done: false};
+            const setRef = liftLog[activeDate][key];
+            
+            if(setRef.done) {
+                setRef.done = false;
+                recalculatePB(name);
+            } else {
+                const w = document.getElementById(`w-${exIdx}-${setIdx}`).value;
+                const r = document.getElementById(`r-${exIdx}-${setIdx}`).value;
+                if(!w || !r) return;
+                setRef.w = parseFloat(w); setRef.r = parseInt(r); setRef.done = true;
+                liftLog[activeDate].__type = document.getElementById('routine-selector').value;
+                const currentPBData = pbHistory[name] ? pbHistory[name].split('-') : [0,0];
+                const currentPBW = parseFloat(currentPBData[0]);
+                const currentPBR = parseInt(currentPBData[1]);
+                if(setRef.w > currentPBW || (setRef.w === currentPBW && setRef.r > currentPBR)) {
+                    pbHistory[name] = `${setRef.w}-${setRef.r}`;
+                }
+                startTimer(selectedRestTime);
+                if(!isShattered) startWalk();
+            }
+            saveAll(); initRoutine();
+        }
+
+        function recalculatePB(name) {
+            let bW = 0, bR = 0;
+            Object.values(liftLog).forEach(day => {
+                Object.keys(day).forEach(k => {
+                    if(k.startsWith(name) && day[k].done) {
+                        const weight = parseFloat(day[k].w);
+                        const reps = parseInt(day[k].r);
+                        if(weight > bW || (weight === bW && reps > bR)) { bW = weight; bR = reps; }
+                    }
+                });
+            });
+            if(bW > 0) pbHistory[name] = `${bW}-${bR}`;
+            else delete pbHistory[name];
+        }
+
+        function startWalk() {
+            const body = document.getElementById('app-body');
+            const status = document.getElementById('walk-status');
+            body.classList.remove('ping-active');
+            void body.offsetWidth; 
+            body.classList.add('ping-active');
+            status.innerText = "MOVE: PACE THE FLOOR"; 
+            status.classList.add('walk-active');
+            if(walkTimeout) clearTimeout(walkTimeout);
+            walkTimeout = setTimeout(stopWalk, 30000);
+        }
+
+        function stopWalk() {
+            const status = document.getElementById('walk-status');
+            status.innerText = "Standby"; 
+            status.classList.remove('walk-active');
+        }
+
+        function startTimer(sec) {
+            timerEndTime = Date.now() + (sec * 1000);
+            updateTimerDisplay();
+            clearInterval(timerInterval);
+            timerInterval = setInterval(updateTimerDisplay, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const now = Date.now();
+            const remaining = Math.max(0, Math.ceil((timerEndTime - now) / 1000));
+            if (remaining <= 0) {
+                document.getElementById('timer-display').innerText = "GO"; buzz();
+                clearInterval(timerInterval);
+            } else {
+                const m = Math.floor(remaining / 60);
+                const s = remaining % 60;
+                document.getElementById('timer-display').innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+            }
+        }
+
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible" && timerEndTime > Date.now()) {
+                updateTimerDisplay();
+            }
+        });
+
+        function showCoach(name, pb, note, range, type, exIdx) {
+            const lowRep = parseInt(range.split('-')[0]);
+            const target = pb || 0;
+            let ramp = [];
+            ramp = [suggest(name)];
+            if (false) {
+                if (type >= 1) ramp.push(`${Math.round(target * 0.45 / 2.5) * 2.5}kg × 8`);
+                if (type >= 1) ramp.push(`${Math.round(target * 0.70 / 2.5) * 2.5}kg × 5`);
+                if ((type === 2 || lowRep <= 6) && type !== 0) {
+                    ramp.push(`${Math.round(target * 0.85 / 2.5) * 2.5}kg × 2`);
+                }
+                if (type === 0) ramp = [`${Math.round(target * 0.5 / 2.5) * 2.5}kg × 8 (Single Feeder)`];
+                if (exIdx > 0 && type < 2) ramp.shift();
+            }
+            document.getElementById('info-title').innerText = name;
+            document.getElementById('warmup-content').innerHTML = `
+                <div class="bg-slate-950 p-6 rounded-3xl border border-slate-800 text-center mb-4">
+                    <p class="text-4xl font-black text-white">${target} KG</p>
+                    <p class="text-[10px] text-amber-500 font-bold uppercase mt-2 tracking-widest">Target Load</p>
+                </div>
+                <div class="space-y-2">
+                    <p class="text-[9px] font-black text-slate-500 uppercase tracking-widest px-1">Next Session Target</p>
+                    <div class="bg-slate-800/40 p-3 rounded-2xl flex flex-col gap-2 border border-slate-700/50">
+                        ${ramp.length ? ramp.map(r => `<span class="text-[12px] font-black text-sky-400 text-center">${r}</span>`).join('') : '<span class="text-slate-500 text-[10px] text-center w-full block">No record yet.</span>'}
+                    </div>
+                </div>
+                <div class="mt-4 p-3 bg-slate-800/20 rounded-2xl text-[11px] text-slate-400 italic text-center border border-slate-800">"${note}"</div>`;
+            document.getElementById('info-modal').style.display = 'flex';
+        }
+
+        function updateTemp(name, s, k, v) {
+            if(!liftLog[activeDate]) liftLog[activeDate] = {};
+            if(!liftLog[activeDate][`${name}-${s}`]) liftLog[activeDate][`${name}-${s}`] = {w:'', r:'', done: false};
+            liftLog[activeDate][`${name}-${s}`][k] = v; saveAll();
+        }
+
+        function calcTonnage() {
+            let total = 0;
+            if(liftLog[activeDate]) Object.values(liftLog[activeDate]).forEach(v => { if(v.done) total += (parseFloat(v.w) * parseFloat(v.r)); });
+            document.getElementById('total-tonnage').innerText = Math.round(total).toLocaleString();
+        }
+
+        function switchTab(t) {
+            document.getElementById('tab-log').classList.toggle('border-amber-500', t==='log');
+            document.getElementById('tab-lib').classList.toggle('border-amber-500', t==='lib');
+            document.getElementById('tab-journal').classList.toggle('border-amber-500', t==='journal');
+            
+            document.getElementById('view-log').classList.toggle('hidden', t!=='log');
+            document.getElementById('view-lib').classList.toggle('hidden', t!=='lib');
+            document.getElementById('view-journal').classList.toggle('hidden', t!=='journal');
+
+            if(t === 'lib') {
+                renderEditor(); refreshBackupStatus();
+                const display = document.getElementById('history-display');
+                display.innerHTML = Object.entries(pbHistory).sort().map(([n, d]) => {
+                    const [w, r] = d.split('-');
+                    return `<div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex justify-between items-center"><span class="text-[10px] font-black uppercase text-slate-400">${n}</span><span class="text-sm font-black text-amber-500">${w}KG x ${r}</span></div>`;
+                }).join('');
+            }
+
+            if(t === 'journal') {
+                const display = document.getElementById('journal-display');
+                renderCal();
+                const sortedDates = Object.keys(liftLog).sort().reverse().filter(d => !selDay || d === selDay);
+                
+                display.innerHTML = sortedDates.map(date => {
+                    const dayData = liftLog[date];
+                    const exercisesForDay = {};
+                    let hasWork = false;
+
+                    // Group sets by exercise name
+                    Object.entries(dayData).forEach(([key, data]) => {
+                        if (data.done) {
+                            const exName = baseName(key);
+                            if (!exercisesForDay[exName]) exercisesForDay[exName] = [];
+                            exercisesForDay[exName].push(data);
+                            hasWork = true;
+                        }
+                    });
+
+                    if (!hasWork) return '';
+
+                    // Try to find split name based on recorded exercises
+                    let splitTitle = "Workout Session";
+                    if (dayData.__type) { splitTitle = dayData.__type === 'upper' ? 'Upper' : 'Lower'; } else for (const [splitName, exList] of Object.entries(legacy)) {
+                        if (exList.some(ex => exercisesForDay[ex.n] || (ex.alt && exercisesForDay[ex.alt]))) {
+                            splitTitle = splitName.replace(/([A-Z])/g, ' $1').trim(); // Format camelCase
+                            break;
+                        }
+                    }
+
+                    const exHtml = Object.entries(exercisesForDay).map(([name, sets]) => {
+                        const setLines = sets.map((s, idx) => `<span class="text-white">${s.w}kg × ${s.r}</span>`).join('<span class="text-slate-700 mx-2">|</span>');
+                        return `<div class="mb-3">
+                                    <p class="text-[10px] font-black uppercase text-sky-400 mb-1">${name}</p>
+                                    <div class="text-[11px] font-bold">${setLines}</div>
+                                </div>`;
+                    }).join('');
+
+                    return `<div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 mb-4">
+                                <div class="flex justify-between items-center border-b border-slate-800 pb-3 mb-4">
+                                    <h3 class="font-black uppercase text-amber-500 text-xs">${splitTitle}</h3>
+                                    <span class="text-[10px] font-bold text-slate-500 tracking-widest">${new Date(date).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })}</span>
+                                </div>
+                                ${exHtml}
+                            </div>`;
+                }).join('');
+            }
+        }
+
+        function exportData() {
+            const d = payload();
+            if (window.Android) { Android.exportData(d); }
+            else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([d], {type: 'application/json'})); a.download = 'IronTrack_Backup.json'; a.click(); }
+        }
+        function importData() { if (window.Android) Android.importData(); }
+        function restoreData(t) {
+            try {
+                const d = JSON.parse(t);
+                if (!d.log || !d.history) throw 0;
+                if (!confirm('Replace all current data with this backup?')) return;
+                localStorage.setItem('iron_log_v4', JSON.stringify(d.log));
+                localStorage.setItem('iron_history_v4', JSON.stringify(d.history));
+                if (d.routines && d.routines.upper) localStorage.setItem('iron_templates_v1', JSON.stringify(d.routines));
+                location.reload();
+            } catch (e) { alert('Not a valid IronTrack backup file.'); }
+        }
+
+        // ---- v3: templates, native backup bridge, flags, stall, prefill ----
+        try { const t = JSON.parse(localStorage.getItem('iron_templates_v1')); if (t && t.upper && t.lower) { exercises.upper = t.upper; exercises.lower = t.lower; } } catch (e) {}
+        function payload() { return JSON.stringify({app: 'IronTrack', version: 3, log: liftLog, history: pbHistory, routines: {upper: exercises.upper, lower: exercises.lower}}); }
+        let nt; function scheduleNative() { if (!window.Android) return; clearTimeout(nt); nt = setTimeout(() => Android.autosave(payload()), 2500); }
+        function chooseFolder() { if (window.Android) Android.chooseFolder(); else alert('Only available in the Android app.'); }
+        function refreshBackupStatus() { const el = document.getElementById('bk-status'); if (el) el.innerText = window.Android ? Android.backupStatus() : 'Browser mode - no folder backup'; }
+        function folderSet() { refreshBackupStatus(); Android.autosave(payload()); Android.weeklyBackup(payload()); }
+        function buzz() { if (window.Android) Android.vibrate(); else if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 400]); }
+        function lastSet(name, s) {
+            const ds = Object.keys(liftLog).filter(d => d < activeDate).sort().reverse();
+            for (const d of ds) { const v = liftLog[d][`${name}-${s}`]; if (v && v.done) { const e = findEx(name); return e && e.time ? `${v.r}s` : `${v.w}\u00d7${v.r}`; } }
+            return '';
+        }
+        function prefill(name, ex) {
+            const t = suggest(name, ex); const m = t.match(/(\d+(?:\.\d+)?)kg \u00d7 (\d+)/); const q = t.match(/(\d+)s/);
+            if (ex.time) return {w: 0, r: q ? q[1] : ''};
+            return {w: m ? m[1] : '', r: m ? m[2] : ''};
+        }
+        function stalled(name) {
+            const ds = Object.keys(liftLog).filter(d => d < activeDate && Object.entries(liftLog[d]).some(([k, v]) => v && v.done && baseName(k) === name)).sort().slice(-3);
+            if (ds.length < 3) return false;
+            const sc = ds.map(d => Math.max(...Object.entries(liftLog[d]).filter(([k, v]) => v && v.done && baseName(k) === name).map(([k, v]) => parseFloat(v.w) * 1000 + parseInt(v.r))));
+            return sc[1] <= sc[0] && sc[2] <= sc[0];
+        }
+        function flagEx(name) { const d = liftLog[activeDate] || (liftLog[activeDate] = {}); const c = d['flag|' + name] || ''; d['flag|' + name] = c === '' ? 'pain' : c === 'pain' ? 'form' : ''; saveAll(); initRoutine(); }
+        function flagOf(name) { const d = liftLog[activeDate]; return d && d['flag|' + name] || ''; }
+        function flagTxt(n) { const f = flagOf(n); return f === 'pain' ? 'PAIN' : f === 'form' ? 'FORM' : '\u2691 Flag'; }
+        function flagCls(n) { const f = flagOf(n); return f === 'pain' ? 'bg-rose-600 text-white' : f === 'form' ? 'bg-amber-500 text-slate-900' : 'bg-slate-800 text-slate-500'; }
+        // Exercise editor
+        function saveTpl() { localStorage.setItem('iron_templates_v1', JSON.stringify({upper: exercises.upper, lower: exercises.lower})); scheduleNative(); initRoutine(); }
+        function edSet(k, i, f, v) {
+            const e = exercises[k][i];
+            if (f === 'n') e.n = v; else if (f === 'r') e.r = v; else if (f === 's') e.s = parseInt(v) || 1;
+            else if (f === 'w0') e.w0 = v === '' ? null : parseFloat(v); else if (f === 'inc') e.inc = parseFloat(v) || 2;
+            else if (f === 'alt') e.alt = v.split(',').map(x => x.trim()).filter(Boolean);
+            saveTpl();
+        }
+        function edMove(k, i, d) { const a = exercises[k], j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; saveTpl(); renderEditor(); }
+        function edDel(k, i) { if (confirm('Delete from the template? Logged history is kept.')) { exercises[k].splice(i, 1); saveTpl(); renderEditor(); } }
+        function edAdd(k) { exercises[k].push({n: 'New Exercise', s: 2, r: '8-12', w0: null, inc: 2, alt: [], c: ''}); saveTpl(); renderEditor(); }
+        function edReset() { if (confirm('Reset both templates to defaults?')) { localStorage.removeItem('iron_templates_v1'); location.reload(); } }
+        function renderEditor() {
+            const inp = (k, i, f, v, ph, cls) => `<input value="${String(v ?? '').replace(/"/g, '&quot;')}" placeholder="${ph}" oninput="edSet('${k}',${i},'${f}',this.value)" class="bg-slate-800 rounded-lg p-2 text-[11px] text-white outline-none ${cls}">`;
+            const btn = 'px-3 py-1 bg-slate-800 rounded-lg text-white';
+            document.getElementById('editor').innerHTML = ['upper', 'lower'].map(k => `<h4 class="text-white font-black uppercase text-xs mt-4 mb-2">${k}</h4>` + exercises[k].map((e, i) => `<div class="bg-slate-900 border border-slate-800 rounded-2xl p-3 mb-2 space-y-2">${inp(k, i, 'n', e.n, 'Name', 'w-full')}<div class="grid grid-cols-4 gap-2">${inp(k, i, 's', e.s, 'Sets', '')}${inp(k, i, 'r', e.r, 'Reps', '')}${inp(k, i, 'w0', e.w0, 'Start kg', '')}${inp(k, i, 'inc', e.inc, '+kg', '')}</div>${inp(k, i, 'alt', (e.alt || []).join(', '), 'Substitutes, comma separated', 'w-full')}<div class="flex gap-2 justify-end text-[10px] font-black"><button onclick="edMove('${k}',${i},-1)" class="${btn}">\u2191</button><button onclick="edMove('${k}',${i},1)" class="${btn}">\u2193</button><button onclick="edDel('${k}',${i})" class="${btn} text-rose-400">DELETE</button></div></div>`).join('') + `<button onclick="edAdd('${k}')" class="w-full bg-slate-800 border border-slate-700 text-white font-black text-[10px] py-3 rounded-xl uppercase">+ Add to ${k}</button>`).join('') + '<button onclick="edReset()" class="mt-4 text-[9px] text-slate-500 underline">Reset templates to defaults</button>';
+        }
+        function saveAll() { localStorage.setItem('iron_log_v4', JSON.stringify(liftLog)); localStorage.setItem('iron_history_v4', JSON.stringify(pbHistory)); scheduleNative(); }
+        function closeInfo() { document.getElementById('info-modal').style.display = 'none'; }
+        function changeDate() { activeDate = document.getElementById('date-selector').value; initRoutine(); }
+        
+        document.getElementById('date-selector').value = activeDate;
+        checkAutoAdvance();
+        initRoutine();
+        if (window.Android) setTimeout(() => Android.weeklyBackup(payload()), 3000);
+    </script>
+</body>
+</html>
