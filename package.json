@@ -1,0 +1,22 @@
+{
+  "name": "ltd-filer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev:server": "npm run dev -w @ltd-filer/server",
+    "dev:addin": "npm run dev -w @ltd-filer/addin",
+    "build": "npm run build -w @ltd-filer/addin",
+    "typecheck": "tsc -b packages/core packages/server packages/addin",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "check": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

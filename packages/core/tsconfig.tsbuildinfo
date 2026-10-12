@@ -1,0 +1,1 @@
+{"root":["./src/companiesHouse.ts","./src/ct600.ts","./src/encode.ts","./src/fields.ts","./src/govtalk.ts","./src/index.ts","./src/irmark.ts","./src/ixbrl.ts","./src/shared.ts","./src/statements.ts","./src/tax.ts","./src/xml.ts","./test/filings.test.ts","./test/statements.test.ts","./test/tax.test.ts"],"version":"5.9.3"}
